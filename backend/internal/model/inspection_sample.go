@@ -20,6 +20,7 @@ type InspectionSample struct {
 	MeasuredValue     string          `gorm:"size:100" json:"measuredValue"`
 	AcceptanceRange   string          `gorm:"size:100" json:"acceptanceRange"`
 	RetestStatus      string          `gorm:"size:20;not null;default:'none'" json:"retestStatus"`
+	ReworkRound       int             `gorm:"not null;default:0;index" json:"reworkRound"`
 	InspectorID       uint            `gorm:"index" json:"inspectorId"`
 	InspectorName     string          `gorm:"size:100" json:"inspectorName"`
 	InspectedAt       *time.Time      `json:"inspectedAt"`
@@ -79,6 +80,9 @@ func (s InspectionSample) ValidateState() error {
 	}
 	if s.RetestStatus == "requested" && s.Result != "fail" {
 		return fmt.Errorf("retest can only be requested for a failed result")
+	}
+	if s.ReworkRound < 0 {
+		return fmt.Errorf("rework round cannot be negative")
 	}
 	return nil
 }

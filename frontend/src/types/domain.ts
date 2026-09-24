@@ -30,6 +30,7 @@ export interface ProductionBatch extends BaseEntity {
   startedAt?: string
   completedAt?: string
   holdReason?: string
+  reworkRound: number
   inspections?: InspectionSample[]
   decisions?: ReleaseDecision[]
 }
@@ -44,6 +45,7 @@ export interface InspectionSample extends BaseEntity {
   measuredValue?: string
   acceptanceRange: string
   retestStatus: 'none' | 'requested' | 'completed'
+  reworkRound: number
   inspectorId?: number
   inspectorName?: string
   inspectedAt?: string
@@ -58,6 +60,7 @@ export interface ReleaseDecision extends BaseEntity {
   approverName: string
   reason: string
   effectiveAt: string
+  reworkRound: number
   inspectionSummary: string
 }
 

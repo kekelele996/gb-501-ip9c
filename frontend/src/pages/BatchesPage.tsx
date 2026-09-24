@@ -49,7 +49,11 @@ export function BatchesPage() {
     { title: '产线', render: (_, row) => row.packagingLine ? `${row.packagingLine.code} · ${row.packagingLine.name}` : row.packagingLineId },
     { title: '责任班组', dataIndex: 'responsibleTeam' },
     { title: '进度', render: (_, row) => `${formatNumber(row.producedQuantity)} / ${formatNumber(row.plannedQuantity)}` },
-    { title: '检验', render: (_, row) => `${row.inspections?.filter((item) => item.result !== 'pending').length || 0}/${row.inspections?.length || 0}` },
+    { title: '返工次数', dataIndex: 'reworkRound', render: (value: number) => value > 0 ? value : 0 },
+    { title: '本轮检验', render: (_, row) => {
+      const current = (row.inspections || []).filter((item) => item.reworkRound === row.reworkRound)
+      return `${current.filter((item) => item.result !== 'pending').length}/${current.length}`
+    } },
     { title: '创建时间', dataIndex: 'createdAt', render: formatDateTime },
     { title: '操作', fixed: 'right', render: (_, row) => <Space><Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/batches/${row.id}`)}>详情</Button>{row.status === 'draft' && <Button size="small" icon={<PlayCircleOutlined />} disabled={!can('batch:write')} onClick={() => void transition(row, 'running')}>开工</Button>}{row.status === 'running' && <Button size="small" danger icon={<PauseCircleOutlined />} disabled={!can('batch:write')} onClick={() => void transition(row, 'hold')}>暂停</Button>}{['hold', 'rework'].includes(row.status) && <Button size="small" icon={<PlayCircleOutlined />} disabled={!can('batch:write')} onClick={() => void transition(row, 'running')}>恢复</Button>}</Space> },
   ]

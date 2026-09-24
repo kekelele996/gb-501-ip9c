@@ -172,7 +172,12 @@ func (s *batchService) Transition(ctx context.Context, actor Actor, id uint, nex
 		if next == constants.BatchStatusRunning {
 			batch.HoldReason = ""
 		}
-		batch.Status = next
+		if next == constants.BatchStatusRework && batch.Status != constants.BatchStatusRework {
+			// 每次进入返工都开启新一轮检验，重新登记的样本归到该轮。
+			batch.EnterRework(reason)
+		} else {
+			batch.Status = next
+		}
 		batch.Normalize()
 		if err := batch.Validate(); err != nil {
 			return util.BadRequest(err.Error())

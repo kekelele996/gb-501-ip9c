@@ -31,7 +31,7 @@ func Build(db *gorm.DB, redisClient *redis.Client, cfg config.Config) (*gin.Engi
 	lineService := service.NewLineService(lineRepo, auditService, transactor)
 	batchService := service.NewBatchService(batchRepo, lineRepo, auditService, transactor)
 	inspectionService := service.NewInspectionService(inspectionRepo, batchRepo, auditService, transactor)
-	releaseService := service.NewReleaseService(releaseRepo, batchRepo, inspectionRepo, auditService, transactor)
+	releaseService := service.NewReleaseService(releaseRepo, batchRepo, auditService, transactor)
 
 	if err := authService.Seed(context.Background()); err != nil {
 		return nil, err

@@ -29,6 +29,53 @@ func TestBatchReadyForRelease(t *testing.T) {
 	}
 }
 
+func TestReadyForReleaseOnlyConsidersCurrentReworkRound(t *testing.T) {
+	batch := validBatch()
+	// 首轮的不合格结果在进入返工后只用于追溯，不应再阻止放行。
+	batch.EnterRework("密封强度不达标")
+	if batch.Status != constants.BatchStatusRework || batch.ReworkRound != 1 {
+		t.Fatalf("enter rework failed: status=%s round=%d", batch.Status, batch.ReworkRound)
+	}
+	batch.Inspections = []InspectionSample{
+		{ReworkRound: 0, Result: "fail", RetestStatus: "completed"},
+	}
+	if ready, reason := batch.ReadyForRelease(); ready || reason != "at least one inspection is required" {
+		t.Fatalf("new round without samples must block release: ready=%v reason=%s", ready, reason)
+	}
+	batch.Inspections = append(batch.Inspections,
+		InspectionSample{ReworkRound: 1, Result: "pass", RetestStatus: "none"},
+		InspectionSample{ReworkRound: 1, Result: "pending", RetestStatus: "none"},
+	)
+	if ready, reason := batch.ReadyForRelease(); ready || reason != "pending inspections remain" {
+		t.Fatalf("pending sample of current round must block: ready=%v reason=%s", ready, reason)
+	}
+	batch.Inspections[2].Result = "fail"
+	batch.Inspections[2].RetestStatus = "requested"
+	if ready, reason := batch.ReadyForRelease(); ready || reason != "failed inspections remain" {
+		t.Fatalf("failed sample of current round must block: ready=%v reason=%s", ready, reason)
+	}
+	batch.Inspections[2].Result = "pass"
+	batch.Inspections[2].RetestStatus = "completed"
+	if ready, reason := batch.ReadyForRelease(); !ready {
+		t.Fatalf("all current-round samples passing should release despite old fail: %s", reason)
+	}
+}
+
+func TestCurrentRoundSummaryCountsCurrentRoundOnly(t *testing.T) {
+	batch := validBatch()
+	batch.ReworkRound = 2
+	batch.Inspections = []InspectionSample{
+		{ReworkRound: 0, Result: "fail", RetestStatus: "completed"},
+		{ReworkRound: 1, Result: "fail", RetestStatus: "requested"},
+		{ReworkRound: 2, Result: "pass", RetestStatus: "none"},
+		{ReworkRound: 2, Result: "pending", RetestStatus: "none"},
+	}
+	total, passed, failed, pending, retest := batch.CurrentRoundSummary()
+	if total != 2 || passed != 1 || failed != 0 || pending != 1 || retest != 0 {
+		t.Fatalf("unexpected current-round summary: total=%d pass=%d fail=%d pending=%d retest=%d", total, passed, failed, pending, retest)
+	}
+}
+
 func TestInspectionValidation(t *testing.T) {
 	now := time.Now()
 	sample := InspectionSample{

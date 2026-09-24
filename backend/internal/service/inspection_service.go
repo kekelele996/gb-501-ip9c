@@ -64,7 +64,8 @@ func (s *inspectionService) Create(ctx context.Context, actor Actor, input dto.C
 		sample = &model.InspectionSample{
 			ProductionBatchID: input.ProductionBatchID, SampleCode: input.SampleCode,
 			SamplingPosition: input.SamplingPosition, InspectionItem: input.InspectionItem,
-			AcceptanceRange: input.AcceptanceRange, Result: "pending", RetestStatus: "none", Notes: input.Notes,
+			AcceptanceRange: input.AcceptanceRange, Result: "pending", RetestStatus: "none",
+			ReworkRound: batch.ReworkRound, Notes: input.Notes,
 		}
 		sample.Normalize()
 		if err := sample.ValidateDefinition(); err != nil {
@@ -98,6 +99,9 @@ func (s *inspectionService) Complete(ctx context.Context, actor Actor, id uint, 
 		sample, err = s.repo.FindForUpdate(txCtx, id)
 		if err != nil {
 			return err
+		}
+		if sample.ReworkRound != batch.ReworkRound {
+			return util.Conflict("历史返工轮次的检验结果仅供追溯，不能修改")
 		}
 		if sample.Result != "pending" && sample.RetestStatus != "requested" {
 			return util.Conflict("检验已经完成")
@@ -153,6 +157,9 @@ func (s *inspectionService) RequestRetest(ctx context.Context, actor Actor, id u
 		sample, err = s.repo.FindForUpdate(txCtx, id)
 		if err != nil {
 			return err
+		}
+		if sample.ReworkRound != batch.ReworkRound {
+			return util.Conflict("历史返工轮次的检验结果仅供追溯，不能申请复测")
 		}
 		if sample.Result != "fail" {
 			return util.Conflict("只有不合格结果可以申请复测")

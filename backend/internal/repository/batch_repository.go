@@ -126,6 +126,10 @@ func (r *batchRepository) Overview(ctx context.Context) (*dto.QualityOverview, e
 	for _, batch := range risky {
 		var failed, pending, retest int64
 		for _, sample := range batch.Inspections {
+			// 旧轮次检验只用于追溯，风险看板同样只统计当前轮次。
+			if sample.ReworkRound != batch.ReworkRound {
+				continue
+			}
 			if sample.Result == "fail" {
 				failed++
 			}

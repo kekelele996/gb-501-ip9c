@@ -17,6 +17,7 @@ type ReleaseDecision struct {
 	ApproverName      string                 `gorm:"size:100;not null" json:"approverName"`
 	Reason            string                 `gorm:"size:1000;not null" json:"reason"`
 	EffectiveAt       time.Time              `gorm:"not null" json:"effectiveAt"`
+	ReworkRound       int                    `gorm:"not null;default:0" json:"reworkRound"`
 	InspectionSummary string                 `gorm:"size:1000" json:"inspectionSummary"`
 }
 
@@ -41,6 +42,9 @@ func (d ReleaseDecision) Validate() error {
 	}
 	if len([]rune(d.Reason)) < 5 || len([]rune(d.Reason)) > 1000 {
 		return fmt.Errorf("decision reason must contain 5-1000 characters")
+	}
+	if d.ReworkRound < 0 {
+		return fmt.Errorf("rework round cannot be negative")
 	}
 	if d.EffectiveAt.IsZero() {
 		return fmt.Errorf("effective time is required")

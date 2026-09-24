@@ -24,6 +24,7 @@ type ProductionBatch struct {
 	StartedAt        *time.Time            `json:"startedAt"`
 	CompletedAt      *time.Time            `json:"completedAt"`
 	HoldReason       string                `gorm:"size:500" json:"holdReason"`
+	ReworkRound      int                   `gorm:"not null;default:0" json:"reworkRound"`
 	Inspections      []InspectionSample    `json:"inspections,omitempty"`
 	Decisions        []ReleaseDecision     `json:"decisions,omitempty"`
 }
@@ -66,6 +67,9 @@ func (b ProductionBatch) Validate() error {
 	if b.Status == constants.BatchStatusHold && b.HoldReason == "" {
 		return fmt.Errorf("hold reason is required when a batch is on hold")
 	}
+	if b.ReworkRound < 0 {
+		return fmt.Errorf("rework round cannot be negative")
+	}
 	return nil
 }
 
@@ -98,6 +102,48 @@ func (b ProductionBatch) InspectionSummary() (total, passed, failed, pending, re
 	return
 }
 
+// CurrentRoundInspections returns the samples registered for the current
+// production round: round 0 is the initial run, every entry into rework
+// increments ReworkRound and starts a new inspection set.
+func (b ProductionBatch) CurrentRoundInspections() []InspectionSample {
+	current := make([]InspectionSample, 0)
+	for _, sample := range b.Inspections {
+		if sample.ReworkRound == b.ReworkRound {
+			current = append(current, sample)
+		}
+	}
+	return current
+}
+
+func (b ProductionBatch) CurrentRoundSummary() (total, passed, failed, pending, retest int) {
+	for _, sample := range b.CurrentRoundInspections() {
+		total++
+		switch sample.Result {
+		case "pass":
+			passed++
+		case "fail":
+			failed++
+		default:
+			pending++
+		}
+		if sample.RetestStatus == "requested" {
+			retest++
+		}
+	}
+	return
+}
+
+// EnterRework moves the batch into rework and opens a fresh inspection round.
+// Only samples of the new round participate in the next release decision;
+// samples of earlier rounds remain on record for traceability.
+func (b *ProductionBatch) EnterRework(reason string) {
+	b.Status = constants.BatchStatusRework
+	b.ReworkRound++
+	if reason = strings.TrimSpace(reason); reason != "" {
+		b.HoldReason = reason
+	}
+}
+
 func (b ProductionBatch) ReadyForRelease() (bool, string) {
 	if b.Status == constants.BatchStatusDraft {
 		return false, "batch has not started"
@@ -105,7 +151,7 @@ func (b ProductionBatch) ReadyForRelease() (bool, string) {
 	if b.Status == constants.BatchStatusReleased {
 		return false, "batch is already released"
 	}
-	total, _, failed, pending, retest := b.InspectionSummary()
+	total, _, failed, pending, retest := b.CurrentRoundSummary()
 	if total == 0 {
 		return false, "at least one inspection is required"
 	}

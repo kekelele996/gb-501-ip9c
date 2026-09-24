@@ -1,5 +1,5 @@
 import { HistoryOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
-import { Button, Col, Row, Segmented, Space, Typography, message } from 'antd'
+import { Button, Col, Row, Segmented, Space, Tag, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useState } from 'react'
 import { batchAPI, releaseAPI } from '../api'
@@ -11,6 +11,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useReleaseStore } from '../stores/releaseStore'
 import type { DecisionType, ProductionBatch, ReleaseDecision } from '../types/domain'
 import { formatDateTime } from '../utils/format'
+import { roundLabel, summarizeRound } from '../utils/rework'
 
 export function ReleasePage() {
   const { can } = useAuth()
@@ -34,11 +35,19 @@ export function ReleasePage() {
     { title: '批次', dataIndex: 'batchNo', render: (value, row) => <Button className="table-link" type="link" onClick={() => setSelected(row)}>{value}</Button> },
     { title: '规格', dataIndex: 'specification' },
     { title: '状态', dataIndex: 'status', render: (value) => <BatchStatusBadge status={value} /> },
-    { title: '检验进度', render: (_, row) => `${row.inspections?.filter((sample) => sample.result !== 'pending').length || 0}/${row.inspections?.length || 0}` },
-    { title: '不合格', render: (_, row) => row.inspections?.filter((sample) => sample.result === 'fail').length || 0 },
+    { title: '返工次数', dataIndex: 'reworkRound', render: (value: number) => value > 0 ? <Tag color="warning">{roundLabel(value)}</Tag> : <Tag>首轮</Tag> },
+    {
+      title: '本轮样本处理',
+      render: (_, row) => {
+        const stats = summarizeRound(row)
+        return <Space size={4}><Tag color="success">合格 {stats.passed}</Tag><Tag>待检 {stats.pending}</Tag><Tag color="warning">待复测 {stats.retest}</Tag><Tag color="error">不合格 {stats.failed}</Tag></Space>
+      },
+    },
+    { title: '本轮总数', render: (_, row) => summarizeRound(row).total },
   ]
   const historyColumns: ColumnsType<ReleaseDecision> = [
     { title: '批次', render: (_, row) => row.productionBatch?.batchNo || row.productionBatchId },
+    { title: '轮次', dataIndex: 'reworkRound', render: (value: number) => value > 0 ? <Tag color="warning">返工 {value}</Tag> : <Tag>首轮</Tag> },
     { title: '决定', dataIndex: 'decision', render: (value) => <StatusBadge value={value} /> },
     { title: '审批人', dataIndex: 'approverName' },
     { title: '理由', dataIndex: 'reason', ellipsis: true },

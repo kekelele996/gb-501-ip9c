@@ -1,5 +1,5 @@
 import { CheckOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Col, Form, Input, Modal, Radio, Row, Select, Space, Typography, message } from 'antd'
+import { Button, Col, Form, Input, Modal, Radio, Row, Select, Space, Tag, Tooltip, Typography, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useState } from 'react'
 import { batchAPI, inspectionAPI } from '../api'
@@ -11,6 +11,7 @@ import { usePagination } from '../hooks/usePagination'
 import { useInspectionStore } from '../stores/inspectionStore'
 import type { InspectionSample, ProductionBatch } from '../types/domain'
 import { formatDateTime } from '../utils/format'
+import { roundLabel } from '../utils/rework'
 
 export function InspectionsPage() {
   const { data, loading, load } = useInspectionStore()
@@ -20,6 +21,7 @@ export function InspectionsPage() {
   const [search, setSearch] = useState('')
   const [result, setResult] = useState<string>()
   const [createOpen, setCreateOpen] = useState(false)
+  const [createBatchId, setCreateBatchId] = useState<number>()
   const [completeTarget, setCompleteTarget] = useState<InspectionSample | null>(null)
   const [saving, setSaving] = useState(false)
   const [createForm] = Form.useForm()
@@ -30,7 +32,7 @@ export function InspectionsPage() {
   const create = async () => {
     const values = await createForm.validateFields()
     setSaving(true)
-    try { await inspectionAPI.create({ ...values, notes: values.notes || '' }); message.success('检验样本已登记'); setCreateOpen(false); createForm.resetFields(); await refresh() } finally { setSaving(false) }
+    try { await inspectionAPI.create({ ...values, notes: values.notes || '' }); message.success('检验样本已登记'); setCreateOpen(false); createForm.resetFields(); setCreateBatchId(undefined); await refresh() } finally { setSaving(false) }
   }
   const complete = async () => {
     if (!completeTarget) return
@@ -41,6 +43,7 @@ export function InspectionsPage() {
   const columns: ColumnsType<InspectionSample> = [
     { title: '样本编号', dataIndex: 'sampleCode', fixed: 'left' },
     { title: '生产批次', render: (_, row) => <Space>{row.productionBatch?.batchNo || row.productionBatchId}{row.productionBatch && <BatchStatusBadge status={row.productionBatch.status} />}</Space> },
+    { title: '轮次', dataIndex: 'reworkRound', render: (value: number, row) => row.productionBatch && value !== row.productionBatch.reworkRound ? <Tooltip title="往轮记录仅供追溯"><Tag>{roundLabel(value)}</Tag></Tooltip> : <Tag color="processing">{roundLabel(value)}</Tag> },
     { title: '抽样位置', dataIndex: 'samplingPosition' },
     { title: '检验项', dataIndex: 'inspectionItem' },
     { title: '接受范围', dataIndex: 'acceptanceRange' },
@@ -48,7 +51,13 @@ export function InspectionsPage() {
     { title: '结果', dataIndex: 'result', render: (value) => <StatusBadge value={value} /> },
     { title: '复测状态', dataIndex: 'retestStatus', render: (value) => <StatusBadge value={value} /> },
     { title: '检验员/时间', render: (_, row) => <div>{row.inspectorName || '-'}<small className="cell-subtitle">{formatDateTime(row.inspectedAt)}</small></div> },
-    { title: '操作', fixed: 'right', render: (_, row) => (row.result === 'pending' || row.retestStatus === 'requested') && <Button size="small" type="primary" icon={<CheckOutlined />} disabled={!can('inspection:write')} onClick={() => setCompleteTarget(row)}>录入结果</Button> },
+    { title: '操作', fixed: 'right', render: (_, row) => {
+      const historical = row.productionBatch !== undefined && row.reworkRound !== row.productionBatch.reworkRound
+      const actionable = row.result === 'pending' || row.retestStatus === 'requested'
+      if (!actionable) return null
+      const button = <Button size="small" type="primary" icon={<CheckOutlined />} disabled={!can('inspection:write') || historical} onClick={() => setCompleteTarget(row)}>录入结果</Button>
+      return historical ? <Tooltip title="往轮检验结果仅供追溯，不能修改">{button}</Tooltip> : button
+    } },
   ]
   return (
     <div className="page-stack">
@@ -56,7 +65,7 @@ export function InspectionsPage() {
       <div className="table-toolbar"><Input allowClear prefix={<SearchOutlined />} placeholder="搜索样本、检验项或位置" value={search} onChange={(event) => setSearch(event.target.value)} onPressEnter={() => void refresh()} /><Select allowClear placeholder="全部结果" value={result} onChange={setResult} options={[{ value: 'pending', label: '待检验' }, { value: 'pass', label: '合格' }, { value: 'fail', label: '不合格' }]} /><Button onClick={() => void refresh()}>查询</Button></div>
       <EntityTable columns={columns} dataSource={data.items} loading={loading} emptyTitle="暂无检验样本" pagination={{ current: pagination.page, pageSize: pagination.pageSize, total: data.total, onChange: pagination.update, showSizeChanger: true }} />
       <Modal title="登记检验样本" width={640} open={createOpen} confirmLoading={saving} onOk={() => void create()} onCancel={() => setCreateOpen(false)} okText="登记" cancelText="取消">
-        <Form form={createForm} layout="vertical"><Form.Item name="productionBatchId" label="生产批次" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={batches.map((batch) => ({ value: batch.id, label: `${batch.batchNo} · ${batch.specification}` }))} /></Form.Item><Row gutter={16}><Col span={12}><Form.Item name="sampleCode" label="样本编号" rules={[{ required: true, min: 3 }]}><Input /></Form.Item></Col><Col span={12}><Form.Item name="samplingPosition" label="抽样位置" rules={[{ required: true }]}><Input placeholder="起始/中段/末段" /></Form.Item></Col></Row><Form.Item name="inspectionItem" label="检验项目" rules={[{ required: true }]}><Input placeholder="密封强度、染色渗透等" /></Form.Item><Form.Item name="acceptanceRange" label="接受范围" rules={[{ required: true }]}><Input placeholder="≥ 1.5 N/15mm" /></Form.Item><Form.Item name="notes" label="备注"><Input.TextArea rows={2} /></Form.Item></Form>
+        <Form form={createForm} layout="vertical"><Form.Item name="productionBatchId" label="生产批次" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" onChange={(value: number) => setCreateBatchId(value)} options={batches.map((batch) => ({ value: batch.id, label: `${batch.batchNo} · ${batch.specification}（${roundLabel(batch.reworkRound)}）` }))} /></Form.Item>{createBatchId && (() => { const target = batches.find((batch) => batch.id === createBatchId); return target ? <Typography.Paragraph type="secondary">新样本将自动归入「{roundLabel(target.reworkRound)}」；往轮检验记录保留供追溯，不参与下次放行。</Typography.Paragraph> : null })()}<Row gutter={16}><Col span={12}><Form.Item name="sampleCode" label="样本编号" rules={[{ required: true, min: 3 }]}><Input /></Form.Item></Col><Col span={12}><Form.Item name="samplingPosition" label="抽样位置" rules={[{ required: true }]}><Input placeholder="起始/中段/末段" /></Form.Item></Col></Row><Form.Item name="inspectionItem" label="检验项目" rules={[{ required: true }]}><Input placeholder="密封强度、染色渗透等" /></Form.Item><Form.Item name="acceptanceRange" label="接受范围" rules={[{ required: true }]}><Input placeholder="≥ 1.5 N/15mm" /></Form.Item><Form.Item name="notes" label="备注"><Input.TextArea rows={2} /></Form.Item></Form>
       </Modal>
       <Modal title={`录入结果 · ${completeTarget?.sampleCode || ''}`} open={Boolean(completeTarget)} confirmLoading={saving} onOk={() => void complete()} onCancel={() => setCompleteTarget(null)} okText="提交" cancelText="取消">
         <Form form={completeForm} layout="vertical" initialValues={{ result: 'pass' }}><Form.Item name="result" label="检验结果" rules={[{ required: true }]}><Radio.Group optionType="button" buttonStyle="solid" options={[{ label: '合格', value: 'pass' }, { label: '不合格', value: 'fail' }]} /></Form.Item><Form.Item name="measuredValue" label="测量值/结论" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="notes" label="检验说明"><Input.TextArea rows={3} /></Form.Item></Form>

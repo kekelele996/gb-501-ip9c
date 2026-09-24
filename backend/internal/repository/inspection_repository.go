@@ -24,8 +24,6 @@ type InspectionRepository interface {
 	FindByCode(context.Context, string) (*model.InspectionSample, error)
 	Create(context.Context, *model.InspectionSample) error
 	Save(context.Context, *model.InspectionSample) error
-	CountByResult(context.Context, uint, string) (int64, error)
-	CountIncomplete(context.Context, uint) (int64, error)
 }
 
 type inspectionRepository struct{ db *gorm.DB }
@@ -81,18 +79,4 @@ func (r *inspectionRepository) Create(ctx context.Context, sample *model.Inspect
 
 func (r *inspectionRepository) Save(ctx context.Context, sample *model.InspectionSample) error {
 	return dbForContext(ctx, r.db).Save(sample).Error
-}
-
-func (r *inspectionRepository) CountByResult(ctx context.Context, batchID uint, result string) (int64, error) {
-	var count int64
-	err := dbForContext(ctx, r.db).Model(&model.InspectionSample{}).
-		Where("production_batch_id = ? AND result = ?", batchID, result).Count(&count).Error
-	return count, err
-}
-
-func (r *inspectionRepository) CountIncomplete(ctx context.Context, batchID uint) (int64, error) {
-	var count int64
-	err := dbForContext(ctx, r.db).Model(&model.InspectionSample{}).
-		Where("production_batch_id = ? AND (result = ? OR retest_status = ?)", batchID, "pending", "requested").Count(&count).Error
-	return count, err
 }
