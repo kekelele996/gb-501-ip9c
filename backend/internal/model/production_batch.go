@@ -21,6 +21,7 @@ type ProductionBatch struct {
 	PackagingLine    PackagingLine         `json:"packagingLine,omitempty"`
 	PlannedQuantity  int                   `gorm:"not null;default:0" json:"plannedQuantity"`
 	ProducedQuantity int                   `gorm:"not null;default:0" json:"producedQuantity"`
+	ReworkCount      int                   `gorm:"not null;default:0" json:"reworkCount"`
 	StartedAt        *time.Time            `json:"startedAt"`
 	CompletedAt      *time.Time            `json:"completedAt"`
 	HoldReason       string                `gorm:"size:500" json:"holdReason"`
@@ -59,6 +60,9 @@ func (b ProductionBatch) Validate() error {
 	}
 	if b.ProducedQuantity > b.PlannedQuantity*2 {
 		return fmt.Errorf("produced quantity exceeds the allowed deviation")
+	}
+	if b.ReworkCount < 0 {
+		return fmt.Errorf("rework count cannot be negative")
 	}
 	if len([]rune(b.HoldReason)) > 500 {
 		return fmt.Errorf("hold reason cannot exceed 500 characters")
@@ -105,20 +109,57 @@ func (b ProductionBatch) ReadyForRelease() (bool, string) {
 	if b.Status == constants.BatchStatusReleased {
 		return false, "batch is already released"
 	}
-	total, _, failed, pending, retest := b.InspectionSummary()
+	total, _, failed, pending, retest := b.CurrentRoundInspectionSummary()
 	if total == 0 {
-		return false, "at least one inspection is required"
+		return false, "at least one inspection is required for the current rework round"
 	}
 	if pending > 0 {
-		return false, "pending inspections remain"
+		return false, "pending inspections remain in the current rework round"
 	}
 	if failed > 0 {
-		return false, "failed inspections remain"
+		return false, "failed inspections remain in the current rework round"
 	}
 	if retest > 0 {
-		return false, "requested retests remain"
+		return false, "requested retests remain in the current rework round"
 	}
 	return true, ""
+}
+
+// CurrentRoundSamples returns only the samples registered for the latest
+// rework round. Samples from earlier rounds stay on the batch for traceability
+// but must not participate in a new release decision.
+func (b ProductionBatch) CurrentRoundSamples() []InspectionSample {
+	return b.RoundSamples(b.ReworkCount)
+}
+
+func (b ProductionBatch) RoundSamples(round int) []InspectionSample {
+	samples := make([]InspectionSample, 0)
+	for _, sample := range b.Inspections {
+		if sample.ReworkRound == round {
+			samples = append(samples, sample)
+		}
+	}
+	return samples
+}
+
+// CurrentRoundInspectionSummary aggregates only the samples belonging to the
+// current rework round.
+func (b ProductionBatch) CurrentRoundInspectionSummary() (total, passed, failed, pending, retest int) {
+	for _, sample := range b.CurrentRoundSamples() {
+		total++
+		switch sample.Result {
+		case "pass":
+			passed++
+		case "fail":
+			failed++
+		default:
+			pending++
+		}
+		if sample.RetestStatus == "requested" {
+			retest++
+		}
+	}
+	return
 }
 
 func (b ProductionBatch) Mutable() bool {

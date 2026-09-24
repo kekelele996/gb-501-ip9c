@@ -62,7 +62,8 @@ func (s *inspectionService) Create(ctx context.Context, actor Actor, input dto.C
 			return util.Conflict("当前批次状态不允许新增检验样本")
 		}
 		sample = &model.InspectionSample{
-			ProductionBatchID: input.ProductionBatchID, SampleCode: input.SampleCode,
+			ProductionBatchID: input.ProductionBatchID, ReworkRound: batch.ReworkCount,
+			SampleCode:       input.SampleCode,
 			SamplingPosition: input.SamplingPosition, InspectionItem: input.InspectionItem,
 			AcceptanceRange: input.AcceptanceRange, Result: "pending", RetestStatus: "none", Notes: input.Notes,
 		}

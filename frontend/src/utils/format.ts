@@ -1,7 +1,14 @@
 import dayjs from 'dayjs'
+import type { InspectionSample, ProductionBatch } from '../types/domain'
 
 export const formatDateTime = (value?: string) => value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
 export const formatNumber = (value?: number) => new Intl.NumberFormat('zh-CN').format(value ?? 0)
+
+export const formatReworkRound = (round: number) => round === 0 ? '首次检验' : `第 ${round} 次返工后`
+
+// 只有当前返工轮次登记的样本参与放行判断，旧轮次样本仅供追溯。
+export const currentRoundSamples = (batch: ProductionBatch): InspectionSample[] =>
+  (batch.inspections || []).filter((sample) => sample.reworkRound === batch.reworkCount)
 
 export const equipmentLabels: Record<string, string> = {
   ready: '待机', running: '运行中', maintenance: '维护中', fault: '故障',

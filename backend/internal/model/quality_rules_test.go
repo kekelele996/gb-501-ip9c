@@ -29,6 +29,35 @@ func TestBatchReadyForRelease(t *testing.T) {
 	}
 }
 
+func TestReadyForReleaseOnlyConsidersCurrentRound(t *testing.T) {
+	batch := validBatch()
+	batch.ReworkCount = 1
+	// Old samples from the first round must stay visible for traceability but
+	// must no longer participate in the release decision.
+	batch.Inspections = []InspectionSample{
+		{ReworkRound: 0, Result: "fail", RetestStatus: "requested"},
+		{ReworkRound: 0, Result: "pass", RetestStatus: "none"},
+	}
+	if ready, reason := batch.ReadyForRelease(); ready {
+		t.Fatalf("new round without samples cannot release: %s", reason)
+	}
+	batch.Inspections = append(batch.Inspections,
+		InspectionSample{ReworkRound: 1, Result: "pending", RetestStatus: "none"})
+	if ready, _ := batch.ReadyForRelease(); ready {
+		t.Fatal("pending samples in the current round block release")
+	}
+	batch.Inspections[2].Result = "fail"
+	batch.Inspections[2].RetestStatus = "requested"
+	if ready, _ := batch.ReadyForRelease(); ready {
+		t.Fatal("failed current-round sample blocks release even if old rounds failed too")
+	}
+	batch.Inspections[2].Result = "pass"
+	batch.Inspections[2].RetestStatus = "none"
+	if ready, reason := batch.ReadyForRelease(); !ready {
+		t.Fatalf("passed current-round samples should release regardless of old rounds: %s", reason)
+	}
+}
+
 func TestInspectionValidation(t *testing.T) {
 	now := time.Now()
 	sample := InspectionSample{

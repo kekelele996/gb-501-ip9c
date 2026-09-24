@@ -10,7 +10,7 @@ import { useAuth } from '../hooks/useAuth'
 import { usePagination } from '../hooks/usePagination'
 import { useBatchStore } from '../stores/batchStore'
 import type { BatchStatus, PackagingLine, ProductionBatch } from '../types/domain'
-import { formatDateTime, formatNumber } from '../utils/format'
+import { formatDateTime, formatNumber, currentRoundSamples, formatReworkRound } from '../utils/format'
 
 export function BatchesPage() {
   const { data, loading, load } = useBatchStore()
@@ -49,7 +49,8 @@ export function BatchesPage() {
     { title: '产线', render: (_, row) => row.packagingLine ? `${row.packagingLine.code} · ${row.packagingLine.name}` : row.packagingLineId },
     { title: '责任班组', dataIndex: 'responsibleTeam' },
     { title: '进度', render: (_, row) => `${formatNumber(row.producedQuantity)} / ${formatNumber(row.plannedQuantity)}` },
-    { title: '检验', render: (_, row) => `${row.inspections?.filter((item) => item.result !== 'pending').length || 0}/${row.inspections?.length || 0}` },
+    { title: '返工次数', render: (_, row) => row.reworkCount > 0 ? formatReworkRound(row.reworkCount) : '未返工' },
+    { title: '本轮检验', render: (_, row) => { const round = currentRoundSamples(row); return `${round.filter((item) => item.result !== 'pending').length}/${round.length}` } },
     { title: '创建时间', dataIndex: 'createdAt', render: formatDateTime },
     { title: '操作', fixed: 'right', render: (_, row) => <Space><Button size="small" icon={<EyeOutlined />} onClick={() => navigate(`/batches/${row.id}`)}>详情</Button>{row.status === 'draft' && <Button size="small" icon={<PlayCircleOutlined />} disabled={!can('batch:write')} onClick={() => void transition(row, 'running')}>开工</Button>}{row.status === 'running' && <Button size="small" danger icon={<PauseCircleOutlined />} disabled={!can('batch:write')} onClick={() => void transition(row, 'hold')}>暂停</Button>}{['hold', 'rework'].includes(row.status) && <Button size="small" icon={<PlayCircleOutlined />} disabled={!can('batch:write')} onClick={() => void transition(row, 'running')}>恢复</Button>}</Space> },
   ]

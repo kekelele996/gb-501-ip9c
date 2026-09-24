@@ -20,15 +20,14 @@ type ReleaseService interface {
 }
 
 type releaseService struct {
-	repo           repository.ReleaseRepository
-	batchRepo      repository.BatchRepository
-	inspectionRepo repository.InspectionRepository
-	audit          AuditService
-	tx             repository.Transactor
+	repo      repository.ReleaseRepository
+	batchRepo repository.BatchRepository
+	audit     AuditService
+	tx        repository.Transactor
 }
 
-func NewReleaseService(repo repository.ReleaseRepository, batchRepo repository.BatchRepository, inspectionRepo repository.InspectionRepository, audit AuditService, tx repository.Transactor) ReleaseService {
-	return &releaseService{repo: repo, batchRepo: batchRepo, inspectionRepo: inspectionRepo, audit: audit, tx: tx}
+func NewReleaseService(repo repository.ReleaseRepository, batchRepo repository.BatchRepository, audit AuditService, tx repository.Transactor) ReleaseService {
+	return &releaseService{repo: repo, batchRepo: batchRepo, audit: audit, tx: tx}
 }
 
 func (s *releaseService) List(ctx context.Context, query dto.PageQuery, decision string) (dto.PageResult[model.ReleaseDecision], error) {
@@ -57,26 +56,26 @@ func (s *releaseService) Decide(ctx context.Context, actor Actor, input dto.Crea
 		if batch.Status == constants.BatchStatusReleased {
 			return util.Conflict("批次已经放行")
 		}
-		incomplete, err := s.inspectionRepo.CountIncomplete(txCtx, batch.ID)
-		if err != nil {
-			return err
-		}
-		failed, err := s.inspectionRepo.CountByResult(txCtx, batch.ID, "fail")
-		if err != nil {
-			return err
-		}
+		roundTotal, roundPassed, roundFailed, roundPending, roundRetest := batch.CurrentRoundInspectionSummary()
 		if input.Decision == constants.DecisionRelease {
-			if len(batch.Inspections) == 0 {
-				return util.Conflict("批次至少需要一项检验结果")
+			if roundTotal == 0 {
+				return util.Conflict("本轮返工后尚未登记检验样本，不能放行")
 			}
-			if incomplete > 0 {
-				return util.Conflict("仍有待完成或待复测的检验")
+			if roundPending > 0 {
+				return util.Conflict("本轮样本仍有待检项，不能放行")
 			}
-			if failed > 0 {
-				return util.Conflict("存在不合格检验，不能放行")
+			if roundRetest > 0 {
+				return util.Conflict("本轮样本仍有待复测项，不能放行")
+			}
+			if roundFailed > 0 {
+				return util.Conflict("本轮存在不合格检验，不能放行")
 			}
 		}
 		before := *batch
+		roundLabel := "首检"
+		if batch.ReworkCount > 0 {
+			roundLabel = fmt.Sprintf("第%d次返工", batch.ReworkCount)
+		}
 		switch input.Decision {
 		case constants.DecisionRelease:
 			batch.Status = constants.BatchStatusReleased
@@ -88,11 +87,19 @@ func (s *releaseService) Decide(ctx context.Context, actor Actor, input dto.Crea
 		case constants.DecisionRework:
 			batch.Status = constants.BatchStatusRework
 			batch.HoldReason = strings.TrimSpace(input.Reason)
+			// A rework decision opens the next rework round only when the
+			// batch was not already in rework; samples registered after this
+			// point are the only ones that can support the next release.
+			if before.Status != constants.BatchStatusRework {
+				batch.ReworkCount++
+			}
 		}
 		decision = &model.ReleaseDecision{
-			ProductionBatchID: batch.ID, Decision: input.Decision, ApproverID: actor.ID,
+			ProductionBatchID: batch.ID, Decision: input.Decision, ReworkRound: before.ReworkCount,
+			ApproverID:   actor.ID,
 			ApproverName: actor.Name, Reason: strings.TrimSpace(input.Reason), EffectiveAt: time.Now(),
-			InspectionSummary: fmt.Sprintf("共 %d 项检验，%d 项不合格，%d 项待处理", len(batch.Inspections), failed, incomplete),
+			InspectionSummary: fmt.Sprintf("%s样本：共 %d 项，合格 %d 项，不合格 %d 项，待检 %d 项，待复测 %d 项",
+				roundLabel, roundTotal, roundPassed, roundFailed, roundPending, roundRetest),
 		}
 		decision.Normalize()
 		if err := decision.Validate(); err != nil {

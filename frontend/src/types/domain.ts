@@ -27,6 +27,7 @@ export interface ProductionBatch extends BaseEntity {
   packagingLine?: PackagingLine
   plannedQuantity: number
   producedQuantity: number
+  reworkCount: number
   startedAt?: string
   completedAt?: string
   holdReason?: string
@@ -37,6 +38,7 @@ export interface ProductionBatch extends BaseEntity {
 export interface InspectionSample extends BaseEntity {
   productionBatchId: number
   productionBatch?: ProductionBatch
+  reworkRound: number
   sampleCode: string
   samplingPosition: string
   inspectionItem: string
@@ -54,6 +56,7 @@ export interface ReleaseDecision extends BaseEntity {
   productionBatchId: number
   productionBatch?: ProductionBatch
   decision: DecisionType
+  reworkRound: number
   approverId: number
   approverName: string
   reason: string

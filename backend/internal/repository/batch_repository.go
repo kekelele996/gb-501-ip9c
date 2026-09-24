@@ -125,7 +125,7 @@ func (r *batchRepository) Overview(ctx context.Context) (*dto.QualityOverview, e
 	}
 	for _, batch := range risky {
 		var failed, pending, retest int64
-		for _, sample := range batch.Inspections {
+		for _, sample := range batch.CurrentRoundSamples() {
 			if sample.Result == "fail" {
 				failed++
 			}

@@ -172,6 +172,11 @@ func (s *batchService) Transition(ctx context.Context, actor Actor, id uint, nex
 		if next == constants.BatchStatusRunning {
 			batch.HoldReason = ""
 		}
+		// Every entry into rework starts a fresh rework round; samples
+		// registered afterwards are tied to the new ReworkCount.
+		if next == constants.BatchStatusRework && batch.Status != constants.BatchStatusRework {
+			batch.ReworkCount++
+		}
 		batch.Status = next
 		batch.Normalize()
 		if err := batch.Validate(); err != nil {

@@ -10,7 +10,7 @@ import { StatusBadge } from '../components/common/StatusBadge'
 import { useAuth } from '../hooks/useAuth'
 import { useReleaseStore } from '../stores/releaseStore'
 import type { DecisionType, ProductionBatch, ReleaseDecision } from '../types/domain'
-import { formatDateTime } from '../utils/format'
+import { currentRoundSamples, formatDateTime, formatReworkRound } from '../utils/format'
 
 export function ReleasePage() {
   const { can } = useAuth()
@@ -34,12 +34,14 @@ export function ReleasePage() {
     { title: '批次', dataIndex: 'batchNo', render: (value, row) => <Button className="table-link" type="link" onClick={() => setSelected(row)}>{value}</Button> },
     { title: '规格', dataIndex: 'specification' },
     { title: '状态', dataIndex: 'status', render: (value) => <BatchStatusBadge status={value} /> },
-    { title: '检验进度', render: (_, row) => `${row.inspections?.filter((sample) => sample.result !== 'pending').length || 0}/${row.inspections?.length || 0}` },
-    { title: '不合格', render: (_, row) => row.inspections?.filter((sample) => sample.result === 'fail').length || 0 },
+    { title: '返工次数', dataIndex: 'reworkCount', render: (value, row) => <Space>{value}{value > 0 && <Typography.Text type="secondary">{formatReworkRound(row.reworkCount)}</Typography.Text>}</Space> },
+    { title: '本轮检验进度', render: (_, row) => { const round = currentRoundSamples(row); return `${round.filter((sample) => sample.result !== 'pending').length}/${round.length}` } },
+    { title: '本轮待复测/不合格', render: (_, row) => { const round = currentRoundSamples(row); return `${round.filter((sample) => sample.retestStatus === 'requested').length}/${round.filter((sample) => sample.result === 'fail').length}` } },
   ]
   const historyColumns: ColumnsType<ReleaseDecision> = [
     { title: '批次', render: (_, row) => row.productionBatch?.batchNo || row.productionBatchId },
     { title: '决定', dataIndex: 'decision', render: (value) => <StatusBadge value={value} /> },
+    { title: '对应轮次', dataIndex: 'reworkRound', render: (value) => formatReworkRound(value) },
     { title: '审批人', dataIndex: 'approverName' },
     { title: '理由', dataIndex: 'reason', ellipsis: true },
     { title: '检验摘要', dataIndex: 'inspectionSummary' },

@@ -13,6 +13,7 @@ type ReleaseDecision struct {
 	ProductionBatchID uint                   `gorm:"index;not null" json:"productionBatchId"`
 	ProductionBatch   ProductionBatch        `json:"productionBatch,omitempty"`
 	Decision          constants.DecisionType `gorm:"size:24;index;not null" json:"decision"`
+	ReworkRound       int                    `gorm:"not null;default:0" json:"reworkRound"`
 	ApproverID        uint                   `gorm:"index;not null" json:"approverId"`
 	ApproverName      string                 `gorm:"size:100;not null" json:"approverName"`
 	Reason            string                 `gorm:"size:1000;not null" json:"reason"`
@@ -32,6 +33,9 @@ func (d ReleaseDecision) Validate() error {
 	}
 	if !d.Decision.Valid() {
 		return fmt.Errorf("unsupported release decision: %s", d.Decision)
+	}
+	if d.ReworkRound < 0 {
+		return fmt.Errorf("rework round cannot be negative")
 	}
 	if d.ApproverID == 0 || d.ApproverName == "" {
 		return fmt.Errorf("approver identity is required")

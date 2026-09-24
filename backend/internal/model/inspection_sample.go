@@ -13,6 +13,7 @@ type InspectionSample struct {
 	Base
 	ProductionBatchID uint            `gorm:"index;not null" json:"productionBatchId"`
 	ProductionBatch   ProductionBatch `json:"productionBatch,omitempty"`
+	ReworkRound       int             `gorm:"index;not null;default:0" json:"reworkRound"`
 	SampleCode        string          `gorm:"size:50;uniqueIndex;not null" json:"sampleCode"`
 	SamplingPosition  string          `gorm:"size:120;not null" json:"samplingPosition"`
 	InspectionItem    string          `gorm:"size:120;not null" json:"inspectionItem"`
@@ -41,6 +42,9 @@ func (s *InspectionSample) Normalize() {
 func (s InspectionSample) ValidateDefinition() error {
 	if s.ProductionBatchID == 0 {
 		return fmt.Errorf("production batch is required")
+	}
+	if s.ReworkRound < 0 {
+		return fmt.Errorf("rework round cannot be negative")
 	}
 	if !sampleCodePattern.MatchString(s.SampleCode) {
 		return fmt.Errorf("sample code must contain 3-50 uppercase letters, numbers or hyphens")
